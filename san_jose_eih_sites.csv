@@ -1,0 +1,6 @@
+site_name,latitude,longitude,proximity_to_library,proximity_to_hospital,sentiment_score,zoning
+Guadalupe Site,37.3305,-121.893,500,1200,0.2,Public
+Story Road Lot,37.3309,-121.8502,1200,3000,-0.1,Industrial
+Santa Clara Street Site,37.3498,-121.8803,300,700,0.4,Mixed Use
+Berryessa Site,37.3852,-121.867,800,1000,-0.3,Residential
+Senter Road Site,37.2975,-121.8546,650,950,0.1,Commercial
