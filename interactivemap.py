@@ -3,6 +3,7 @@ import pandas as pd
 import streamlit as st
 import pydeck as pdk
 import openai
+import datetime
 from dotenv import load_dotenv
 
 # 🌍 Load environment variables
@@ -12,7 +13,7 @@ load_dotenv()
 st.markdown("""
 <style>
     .stApp {
-        background-color: #CBF3F9;
+        background-color: #FDFD96;
         font-family: 'Segoe UI', sans-serif;
     }
 
@@ -57,20 +58,12 @@ tab1, tab2, tab3 = st.tabs(["🏠 Home", "🗺️ Map Viewer", "🧠 AI Site Ana
 
 # 🏠 HOME TAB
 with tab1:
-    # 🏠 HOME TAB HEADER
-
-    # 🖼️ Display Logo – Streamlit native (for accessibility)
     st.image("HomeFinderLogo.png", width=200)
-
-    # 🎨 Centered HTML version (for visual control)
-    st.markdown(
-        """
-        <div style="text-align: center;">
-            <img src="HomeFinder Logo.png" width="200">
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    st.markdown("""
+    <div style="text-align: center;">
+        <img src="HomeFinder Logo.png" width="200">
+    </div>
+    """, unsafe_allow_html=True)
 
     st.title("🏙️ San Jose EIH Site Explorer")
     st.markdown("Welcome to the **Emergency Interim Housing (EIH)** Site Explorer powered by AI.")
@@ -80,6 +73,12 @@ with tab1:
     - 📊 Analyze infrastructure & community sentiment  
     - 🧠 Use AI to recommend optimal sites for development
     """)
+
+    # Feature 2: Data Freshness Indicator
+    file_path = 'san_jose_eih_sites.csv'
+    if os.path.exists(file_path):
+        modified_time = os.path.getmtime(file_path)
+        st.info(f"📅 Dataset last updated: {datetime.datetime.fromtimestamp(modified_time).strftime('%Y-%m-%d %H:%M:%S')}")
 
     with st.expander("📂 Preview Raw Data Table"):
         st.dataframe(data)
@@ -121,6 +120,21 @@ with tab3:
 
     selected = st.multiselect("📌 Choose sites to analyze:", options=data['site_name'].unique())
 
+    # Feature 1: AI Transparency Disclaimer
+    with st.expander("📘 About this AI Analysis"):
+        st.markdown("""
+        - The recommendations provided here are generated using **OpenAI's GPT model**.
+        - They are based on proximity metrics and sentiment scores in the uploaded dataset.
+        - Please note these insights are **not absolute facts**—they are generated based on patterns in the data and may reflect inherent biases.
+        - Use them as **a guide**, not a final decision-making tool.
+        """)
+
+    # Feature 3: Manual Weighting for AI Evaluation
+    st.markdown("⚙️ **Customize Weighting** (optional)")
+    weight_sentiment = st.slider("Weight for Sentiment Score", 0.0, 1.0, 0.33)
+    weight_library = st.slider("Weight for Proximity to Library", 0.0, 1.0, 0.33)
+    weight_hospital = st.slider("Weight for Proximity to Hospital", 0.0, 1.0, 0.34)
+
     if st.button("🚀 Run AI Analysis") and selected:
         selected_data = data[data['site_name'].isin(selected)]
 
@@ -132,9 +146,19 @@ with tab3:
                 f"Sentiment {row['sentiment_score']}\n"
             )
 
+        weight_summary = f"""
+User-defined weights:
+- Sentiment: {weight_sentiment}
+- Library Proximity: {weight_library}
+- Hospital Proximity: {weight_hospital}
+"""
+
         prompt = f"""You are a policy analyst. Analyze the following Emergency Interim Housing (EIH) candidate sites based on proximity to infrastructure and resident sentiment. Recommend which sites seem more viable and why:
 
 {site_summary}
+
+User-defined priority:
+{weight_summary}
 
 Be specific in your reasoning based on the numbers given.
 """
@@ -149,3 +173,4 @@ Be specific in your reasoning based on the numbers given.
 
         st.subheader("📈 AI Recommendation")
         st.success(response.choices[0].message.content)
+
