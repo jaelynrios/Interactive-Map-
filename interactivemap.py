@@ -13,7 +13,7 @@ load_dotenv()
 st.markdown("""
 <style>
     .stApp {
-        background-color: #FDFD96;
+        background-color:rgb(150, 219, 253);
         font-family: 'Segoe UI', sans-serif;
     }
 
@@ -173,4 +173,3 @@ Be specific in your reasoning based on the numbers given.
 
         st.subheader("📈 AI Recommendation")
         st.success(response.choices[0].message.content)
-
