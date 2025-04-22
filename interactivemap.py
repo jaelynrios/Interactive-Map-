@@ -13,12 +13,12 @@ load_dotenv()
 st.markdown("""
 <style>
     .stApp {
-        background-color:rgb(150, 219, 253);
+        background-color: #0e5669;
         font-family: 'Segoe UI', sans-serif;
     }
 
     h1, h2, h3 {
-        color: #0B3D91;
+        color: #000000;
     }
 
     .stTabs [data-baseweb="tab"] {
@@ -28,8 +28,8 @@ st.markdown("""
     }
 
     div.stButton > button {
-        background-color: #0B3D91;
-        color: white;
+        background-color: #FFFFFF;
+        color: #FFFFFF;
         font-weight: bold;
         border-radius: 10px;
         padding: 10px 24px;
@@ -41,7 +41,7 @@ st.markdown("""
     }
 
     .deck-tooltip {
-        color: white;
+        color: #FFFFFF;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -53,8 +53,15 @@ client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 data = pd.read_csv('san_jose_eih_sites.csv')
 data = data.dropna(subset=['latitude', 'longitude'])
 
+# ➕ Calculate Infrastructure Influence Score (IIS)
+def calculate_iis(row, w_sent, w_lib, w_hosp):
+    norm_sent = row['sentiment_score'] / 100
+    norm_lib = 1 - min(row['proximity_to_library'], 1000) / 1000
+    norm_hosp = 1 - min(row['proximity_to_hospital'], 1000) / 1000
+    return (w_sent * norm_sent) + (w_lib * norm_lib) + (w_hosp * norm_hosp)
+
 # 🧭 Create tabs
-tab1, tab2, tab3 = st.tabs(["🏠 Home", "🗺️ Map Viewer", "🧠 AI Site Analysis"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏠 Home", "🗺️ Map Viewer", "🧠 AI Site Analysis", "📊 Community Pulse", "🧩 Resident Matching", "📈 Post-Site Feedback"])
 
 # 🏠 HOME TAB
 with tab1:
@@ -72,9 +79,10 @@ with tab1:
     - 🗺️ View candidate EIH sites on a map  
     - 📊 Analyze infrastructure & community sentiment  
     - 🧠 Use AI to recommend optimal sites for development
+    - 🧩 Match individuals to appropriate sites
+    - 📈 Track performance feedback post-deployment
     """)
 
-    # Feature 2: Data Freshness Indicator
     file_path = 'san_jose_eih_sites.csv'
     if os.path.exists(file_path):
         modified_time = os.path.getmtime(file_path)
@@ -86,6 +94,21 @@ with tab1:
 # 🗺️ MAP VIEWER TAB
 with tab2:
     st.header("📍 Interactive Map of Candidate EIH Sites")
+
+    weight_sentiment = 0.33
+    weight_library = 0.33
+    weight_hospital = 0.34
+    data['iis_score'] = data.apply(lambda row: calculate_iis(row, weight_sentiment, weight_library, weight_hospital), axis=1)
+
+    def tag_site(score):
+        if score >= 0.75:
+            return "🏅 Ideal"
+        elif score >= 0.5:
+            return "👍 Moderate"
+        else:
+            return "⚠️ Poor"
+
+    data['suitability_tag'] = data['iis_score'].apply(tag_site)
 
     layer = pdk.Layer(
         'ScatterplotLayer',
@@ -103,12 +126,16 @@ with tab2:
         pitch=0
     )
 
+    tooltip_text = """📍 Site: {site_name}
+🏫 Library: {proximity_to_library}m
+🏥 Hospital: {proximity_to_hospital}m
+💬 Sentiment Score: {sentiment_score}
+🔎 Suitability: {suitability_tag}"""
+
     r = pdk.Deck(
         layers=[layer],
         initial_view_state=view_state,
-        tooltip={
-            "text": "📍 Site: {site_name}\n🏫 Library: {proximity_to_library}m\n🏥 Hospital: {proximity_to_hospital}m\n💬 Sentiment Score: {sentiment_score}"
-        }
+        tooltip={"text": tooltip_text}
     )
 
     st.pydeck_chart(r)
@@ -120,7 +147,6 @@ with tab3:
 
     selected = st.multiselect("📌 Choose sites to analyze:", options=data['site_name'].unique())
 
-    # Feature 1: AI Transparency Disclaimer
     with st.expander("📘 About this AI Analysis"):
         st.markdown("""
         - The recommendations provided here are generated using **OpenAI's GPT model**.
@@ -129,7 +155,6 @@ with tab3:
         - Use them as **a guide**, not a final decision-making tool.
         """)
 
-    # Feature 3: Manual Weighting for AI Evaluation
     st.markdown("⚙️ **Customize Weighting** (optional)")
     weight_sentiment = st.slider("Weight for Sentiment Score", 0.0, 1.0, 0.33)
     weight_library = st.slider("Weight for Proximity to Library", 0.0, 1.0, 0.33)
@@ -137,13 +162,14 @@ with tab3:
 
     if st.button("🚀 Run AI Analysis") and selected:
         selected_data = data[data['site_name'].isin(selected)]
+        selected_data['iis_score'] = selected_data.apply(lambda row: calculate_iis(row, weight_sentiment, weight_library, weight_hospital), axis=1)
 
         site_summary = ""
         for _, row in selected_data.iterrows():
             site_summary += (
                 f"- {row['site_name']}: Library {row['proximity_to_library']}m, "
                 f"Hospital {row['proximity_to_hospital']}m, "
-                f"Sentiment {row['sentiment_score']}\n"
+                f"Sentiment {row['sentiment_score']}, IIS Score: {row['iis_score']:.2f}\n"
             )
 
         weight_summary = f"""
@@ -160,8 +186,7 @@ User-defined weights:
 User-defined priority:
 {weight_summary}
 
-Be specific in your reasoning based on the numbers given.
-"""
+Be specific in your reasoning based on the numbers given."""
 
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -173,3 +198,67 @@ Be specific in your reasoning based on the numbers given.
 
         st.subheader("📈 AI Recommendation")
         st.success(response.choices[0].message.content)
+
+# 📊 COMMUNITY PULSE TAB
+with tab4:
+    st.header("📊 Community Sentiment & Infrastructure Pulse")
+
+    st.markdown("This view provides a high-level overview of sentiment and access to resources across the city.")
+
+    st.subheader("Top 3 Sites by Sentiment")
+    st.dataframe(data.sort_values(by="sentiment_score", ascending=False).head(3))
+
+    st.subheader("Bottom 3 Sites by Sentiment")
+    st.dataframe(data.sort_values(by="sentiment_score", ascending=True).head(3))
+
+    st.subheader("Average Infrastructure Influence Score (IIS)")
+    st.metric("Citywide Avg IIS", f"{data['iis_score'].mean():.2f}")
+
+# 🧩 RESIDENT MATCHING TAB
+with tab5:
+    st.header("🧩 Resident-to-Site Matching")
+
+    st.markdown("""
+    This AI-powered tool helps caseworkers or planners assign individuals to the most suitable EIH site based on personal needs.
+    """)
+
+    name = st.text_input("Resident Name")
+    needs = st.text_area("Describe the resident's needs, preferences, or constraints:")
+
+    if st.button("🧠 Match to Site") and name and needs:
+        match_prompt = f"""You are a social housing advisor. Based on the following resident profile and available EIH site data, recommend the best site for placement and explain your reasoning:
+
+Resident Info:
+{name}
+{needs}
+
+Site Options:
+{data[['site_name', 'proximity_to_library', 'proximity_to_hospital', 'sentiment_score']].to_string(index=False)}
+
+Be thoughtful, empathetic, and specific."""
+
+        match_response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You match residents with appropriate temporary housing based on their needs."},
+                {"role": "user", "content": match_prompt}
+            ]
+        )
+
+        st.subheader("🔗 Best Match Recommendation")
+        st.info(match_response.choices[0].message.content)
+
+# 📈 FEEDBACK LOOP TAB
+with tab6:
+    st.header("📈 Post-Site Feedback Tracker")
+
+    st.markdown("Use this section to log performance data or feedback about EIH sites post-deployment for future learning.")
+
+    feedback_site = st.selectbox("Select Site for Feedback:", data['site_name'].unique())
+    feedback = st.text_area("Enter qualitative or performance-based feedback:")
+
+    if st.button("💾 Save Feedback"):
+        with open("site_feedback_log.txt", "a") as f:
+            f.write(f"\n{datetime.datetime.now()} | Site: {feedback_site} | Feedback: {feedback}")
+        st.success("✅ Feedback logged. Thank you!")
+
